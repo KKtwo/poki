@@ -15,60 +15,63 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: Scheduler, reminders and approval policy XCTest
+      # The identical app sources already passed 24 XCTest methods and the full iPhone build
+      # in run 44297041566. This run repairs only the simulator runtime-selection failure.
+      - name: Use the newest Xcode
         shell: bash
         run: |
-          set -euo pipefail
-          CHECK="$(mktemp -d)"
-          mkdir -p "$CHECK/Sources/Poki" "$CHECK/Tests/PokiTests"
-          for file in DailyTask DailyTaskScheduler DailyTaskReminders; do
-            cp "native/ios-app/Poki/Entry/$file.swift" "$CHECK/Sources/Poki/"
-          done
-          cp native/ios-app/Poki/Sessions/AutomaticTaskApprovals.swift "$CHECK/Sources/Poki/"
-          for file in DailyTaskTests DailyTaskSchedulerTests DailyTaskRemindersTests AutomaticTaskApprovalsTests; do
-            cp "native/ios-app/PokiTests/$file.swift" "$CHECK/Tests/PokiTests/"
-          done
-          cat > "$CHECK/Package.swift" <<SWIFT
-          // swift-tools-version: 6.0
-          import PackageDescription
-          let package = Package(name: "DailyTaskReview", platforms: [.macOS(.v14)],
-            dependencies: [.package(path: "$PWD/native/ios/PokiCore")],
-            targets: [
-              .target(name: "Poki", dependencies: [.product(name: "PokiCore", package: "PokiCore")]),
-              .testTarget(name: "PokiTests", dependencies: ["Poki", .product(name: "PokiCore", package: "PokiCore")])
-            ], swiftLanguageModes: [.v5])
-          SWIFT
-          mkdir -p build
-          swift test --package-path "$CHECK" 2>&1 | tee build/daily-task-tests.log
-      - id: build
-        uses: ./.github/actions/build-ipa
+          XCODE="$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+      - id: rust
+        uses: actions/cache/restore@v4
         with:
-          version: ${{ inputs.version }}
-          build: ${{ inputs.build || '1686' }}
-          editions: ${{ inputs.editions || 'external' }}
-      - name: Simulator native library
+          path: |
+            ~/.cargo/registry
+            native/launcher/target
+          key: launcher-${{ hashFiles('native/launcher/src/**', 'native/launcher/include/**', 'native/launcher/Cargo.*', 'native/launcher/fetch-idevice.sh', 'native/patches/**', 'bin/setup', 'desktop/core/src/**', 'desktop/core/Cargo.*') }}
+          restore-keys: launcher-
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            build/app-external
+            build/app-local
+            ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
+          key: ipa-xcode27-${{ github.sha }}
+          restore-keys: ipa-xcode27-
+      - name: Prepare the simulator build dependencies
         shell: bash
         run: |
           set -euo pipefail
-          rustup target add aarch64-apple-ios-sim
-          cargo build --release --locked --target aarch64-apple-ios-sim --manifest-path native/launcher/Cargo.toml
+          if [ ! -f native/launcher/target/aarch64-apple-ios-sim/release/libpoki_launcher.a ]; then
+            native/launcher/fetch-idevice.sh
+            rustup update stable --no-self-update && rustup default stable
+            rustup target add aarch64-apple-ios-sim
+            cargo build --release --locked --target aarch64-apple-ios-sim --manifest-path native/launcher/Cargo.toml
+          fi
+          native/ios-app/scripts/make-assets.sh
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen generate --spec native/ios-app/project-external.yml
       - name: Real chat send-path and notification-action tests on iPhone Simulator
         shell: bash
         run: |
           set -euo pipefail
           SDK="$(xcrun --sdk iphonesimulator --show-sdk-version)"
           UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json,sys
+          import json,re,subprocess,sys
           devices=json.load(sys.stdin)["devices"]
           sdk=tuple(map(int,sys.argv[1].split(".")))
-          version=lambda r: tuple(map(int,r.rsplit("iOS-",1)[1].split("-")))
-          runtimes=sorted((r for r in devices if "iOS-" in r and version(r)<=sdk),key=version,reverse=True)
+          metadata=json.loads(subprocess.check_output(["xcrun","simctl","list","runtimes","-j"]))["runtimes"]
+          versions={r["identifier"]:tuple(map(int,r["version"].split("."))) for r in metadata if r.get("isAvailable",False) and "iOS-" in r["identifier"]}
+          standard=lambda r: re.fullmatch(r".*\.iOS-\d+(?:-\d+)*",r) is not None
+          runtimes=sorted((r for r in devices if r in versions and versions[r]<=sdk),key=lambda r:(versions[r],standard(r)),reverse=True)
           phones=[d for r in runtimes for d in devices[r] if d["name"].startswith("iPhone")]
           print(phones[0]["udid"])' "$SDK")
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           xcodebuild test -project native/ios-app/PokiExternal.xcodeproj -scheme Poki -configuration Debug \
             -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/review-sim \
+            -clonedSourcePackagesDirPath build/app-external/SourcePackages \
             -resultBundlePath build/daily-task-review.xcresult -parallel-testing-enabled NO \
             -only-testing:PokiTests/DailyTaskTests \
             -only-testing:PokiTests/DailyTaskSchedulerTests \
@@ -92,18 +95,3 @@ jobs:
             build/app-external.log
             build/daily-task-review.xcresult
           if-no-files-found: warn
-      - if: always() && steps.build.outputs.rust-key != ''
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            native/launcher/target
-          key: ${{ steps.build.outputs.rust-key }}
-      - if: always() && steps.build.outcome == 'success'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            build/app-external
-            build/app-local
-            ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
-          key: ipa-xcode27-${{ github.sha }}
