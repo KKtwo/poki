@@ -26,7 +26,8 @@ jobs:
         uses: ./.github/actions/build-ipa
         with:
           version: ${{ inputs.version }}
-          build: ${{ inputs.build }}
+          # Fork-only preview: use the next build after the installed 1683.
+          build: ${{ inputs.build || '1684' }}
           editions: ${{ inputs.editions || 'external' }}
       - uses: actions/upload-artifact@v4
         with:
