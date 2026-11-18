@@ -22,11 +22,26 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - name: Daily task clock and deduplication tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHECK="$(mktemp -d)"
+          mkdir -p "$CHECK/Sources/Poki" "$CHECK/Tests/PokiTests"
+          cp native/ios-app/Poki/Entry/DailyTask.swift "$CHECK/Sources/Poki/"
+          cp native/ios-app/PokiTests/DailyTaskTests.swift "$CHECK/Tests/PokiTests/"
+          cat > "$CHECK/Package.swift" <<'SWIFT'
+          // swift-tools-version: 6.0
+          import PackageDescription
+          let package = Package(name: "PokiDailyTaskTest", platforms: [.macOS(.v14)], targets: [.target(name: "Poki"), .testTarget(name: "PokiTests", dependencies: ["Poki"])], swiftLanguageModes: [.v5])
+          SWIFT
+          swift test --package-path "$CHECK"
       - id: build
         uses: ./.github/actions/build-ipa
         with:
           version: ${{ inputs.version }}
-          build: ${{ inputs.build }}
+          # Fork-only preview: keep the numeric build above the installed 1684.
+          build: ${{ inputs.build || '1685' }}
           editions: ${{ inputs.editions || 'external' }}
       - uses: actions/upload-artifact@v4
         with:
