@@ -1,6 +1,22 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Automatic daily tasks use at least Balanced approvals without changing your saved settings." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动执行每日任务时至少使用均衡审批，不会更改你保存的设置。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動執行每日任務時至少使用均衡審批，不會更改你儲存的設定。"
+          }
+        }
+      }
+    },
     "Delete a daily task before adding another." : {
       "localizations" : {
         "zh-Hans" : {
@@ -22,7 +38,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "运行任务"
+            "value" : "执行任务"
           }
         },
         "zh-Hant" : {
@@ -54,13 +70,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点按运行定时任务。"
+            "value" : "点按执行每日任务。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "點一下以執行排程任務。"
+            "value" : "點一下以執行每日任務。"
           }
         }
       }
@@ -70,7 +86,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每日运行时间"
+            "value" : "每日执行时间"
           }
         },
         "zh-Hant" : {
@@ -81,18 +97,18 @@
         }
       }
     },
-    "With Poki on in the background, tasks start when your iPhone is unlocked and Poki is idle. Otherwise, tap the reminder." : {
+    "Tasks start automatically only while Poki is open and idle. Otherwise, tap the reminder." : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Poki 在后台运行时，iPhone 已解锁且 Poki 空闲就会自动执行任务。否则，点按提醒即可运行。"
+            "value" : "仅当 Poki 位于前台且空闲时，才会自动执行每日任务。否则，点按提醒即可执行。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Poki 在背景執行時，iPhone 已解鎖且 Poki 閒置就會自動執行任務。否則，點一下提醒即可執行。"
+            "value" : "僅當 Poki 位於前景且閒置時，才會自動執行每日任務。否則，點一下提醒即可執行。"
           }
         }
       }
@@ -102,13 +118,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保存定时任务"
+            "value" : "保存每日任务"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "儲存排程任務"
+            "value" : "儲存每日任務"
           }
         }
       }
@@ -134,13 +150,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "允许通知后，Poki 在后台也能提醒你。"
+            "value" : "允许通知后，Poki 不在前台时也能提醒你。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "允許通知後，Poki 在背景也能提醒你。"
+            "value" : "允許通知後，Poki 不在前景時也能提醒你。"
           }
         }
       }
@@ -150,13 +166,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法更新定时任务"
+            "value" : "无法更新每日任务"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無法更新排程任務"
+            "value" : "無法更新每日任務"
           }
         }
       }
@@ -278,13 +294,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "删除定时任务"
+            "value" : "删除每日任务"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "刪除排程任務"
+            "value" : "刪除每日任務"
           }
         }
       }
@@ -35614,6 +35630,270 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打開高德地圖，查一下路線，目的地是"
+          }
+        }
+      }
+    },
+    "Cancel Sign-In" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel Sign-In"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消登录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取消登入"
+          }
+        }
+      }
+    },
+    "Cancelling sign-in" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancelling sign-in"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在取消登录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在取消登入"
+          }
+        }
+      }
+    },
+    "Sending a new code" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sending a new code"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在发送新验证码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在傳送新驗證碼"
+          }
+        }
+      }
+    },
+    "Resend Verification Code" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resend Verification Code"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新发送验证码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新傳送驗證碼"
+          }
+        }
+      }
+    },
+    "Resend Verification Code (%lld s)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resend Verification Code (%lld s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新发送验证码（%lld 秒）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新傳送驗證碼（%lld 秒）"
+          }
+        }
+      }
+    },
+    "Resend Verification Code (wait %lld min)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resend Verification Code (wait %lld min)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新发送验证码（需再等 %lld 分钟）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新傳送驗證碼（需再等 %lld 分鐘）"
+          }
+        }
+      }
+    },
+    "Resend Verification Code (wait %lld s)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resend Verification Code (wait %lld s)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新发送验证码（需再等 %lld 秒）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新傳送驗證碼（需再等 %lld 秒）"
+          }
+        }
+      }
+    },
+    "That verification code is incorrect. Check the 6-digit code and enter the newest code you received." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That verification code is incorrect. Check the 6-digit code and enter the newest code you received."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证码不对，请核对后输入你收到的六位验证码。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "驗證碼不對，請核對後輸入你收到的六位驗證碼。"
+          }
+        }
+      }
+    },
+    "That verification code is incorrect. Stop and wait a few minutes before trying again so Apple does not lock this Apple Account, then enter the newest 6-digit code." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That verification code is incorrect. Stop and wait a few minutes before trying again so Apple does not lock this Apple Account, then enter the newest 6-digit code."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证码不对。请先停下来等几分钟，以免 Apple 锁定该账号，之后再输入最新收到的六位验证码。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "驗證碼不對。請先停下來等幾分鐘，以免 Apple 鎖定該帳號，之後再輸入最新收到的六位驗證碼。"
+          }
+        }
+      }
+    },
+    "That verification code has expired. Enter the newest 6-digit code, or request a new code." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That verification code has expired. Enter the newest 6-digit code, or request a new code."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "验证码已过期，请输入最新一条验证码，或点“重新发送验证码”。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "驗證碼已過期，請輸入最新一條驗證碼，或點「重新傳送驗證碼」。"
+          }
+        }
+      }
+    },
+    "Apple has had too many sign-in attempts or codes for this Apple Account. Wait about an hour before you sign in again, because each new try asks Apple for another code." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple has had too many sign-in attempts or codes for this Apple Account. Wait about an hour before you sign in again, because each new try asks Apple for another code."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该 Apple 账户的登录或验证码请求次数过多，请等待约一小时后再试，以免每次重试继续向 Apple 请求新验证码。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "該 Apple 帳號的登入或驗證碼請求次數過多，請等待約一小時後再試，以免每次重試繼續向 Apple 請求新驗證碼。"
+          }
+        }
+      }
+    },
+    "Apple verified the code, but did not finish opening the session. Sign in again to start a fresh session." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple verified the code, but did not finish opening the session. Sign in again to start a fresh session."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple 已验证该验证码，但未完成会话建立。请重新登录以发起新会话。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple 已驗證該驗證碼，但未完成工作階段建立。請重新登入以發起新工作階段。"
           }
         }
       }
