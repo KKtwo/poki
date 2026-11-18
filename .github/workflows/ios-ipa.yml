@@ -1,62 +1,106 @@
-# Only the unsigned IPA, with no tests (those run in ios-app.yml): a fast build for hand testing
-# and for releases. The phone's Rust library is cached by its sources, so most builds are app-only.
-name: iOS IPA
-
+# Fork-only review verification; this wrapper is not part of upstream PR #480.
+name: iOS daily task review
 on:
   workflow_dispatch:
-  # Builds the app from the calling run's commit with a given version (the steps are in .github/actions/build-ipa).
   workflow_call:
     inputs:
       version: { type: string, required: true }
       build: { type: string, required: true }
-      # Which connection options to build: external (the one Poki Setup installs) and/or local.
       editions: { type: string, required: false, default: external }
-
 permissions:
   contents: read
-
 jobs:
   app:
-    # The Xcode 27 image: the iOS 27.1 SDK or later, which the iPhone Duo needs (build-ipa).
     runs-on: xcode-27
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: Daily task clock and deduplication tests
+      - name: Scheduler, reminders and approval policy XCTest
         shell: bash
         run: |
           set -euo pipefail
           CHECK="$(mktemp -d)"
           mkdir -p "$CHECK/Sources/Poki" "$CHECK/Tests/PokiTests"
-          cp native/ios-app/Poki/Entry/DailyTask.swift "$CHECK/Sources/Poki/"
-          cp native/ios-app/PokiTests/DailyTaskTests.swift "$CHECK/Tests/PokiTests/"
-          cat > "$CHECK/Package.swift" <<'SWIFT'
+          for file in DailyTask DailyTaskScheduler DailyTaskReminders; do
+            cp "native/ios-app/Poki/Entry/$file.swift" "$CHECK/Sources/Poki/"
+          done
+          cp native/ios-app/Poki/Sessions/AutomaticTaskApprovals.swift "$CHECK/Sources/Poki/"
+          for file in DailyTaskTests DailyTaskSchedulerTests DailyTaskRemindersTests AutomaticTaskApprovalsTests; do
+            cp "native/ios-app/PokiTests/$file.swift" "$CHECK/Tests/PokiTests/"
+          done
+          cat > "$CHECK/Package.swift" <<SWIFT
           // swift-tools-version: 6.0
           import PackageDescription
-          let package = Package(name: "PokiDailyTaskTest", platforms: [.macOS(.v14)], targets: [.target(name: "Poki"), .testTarget(name: "PokiTests", dependencies: ["Poki"])], swiftLanguageModes: [.v5])
+          let package = Package(name: "DailyTaskReview", platforms: [.macOS(.v14)],
+            dependencies: [.package(path: "$PWD/native/ios/PokiCore")],
+            targets: [
+              .target(name: "Poki", dependencies: [.product(name: "PokiCore", package: "PokiCore")]),
+              .testTarget(name: "PokiTests", dependencies: ["Poki", .product(name: "PokiCore", package: "PokiCore")])
+            ], swiftLanguageModes: [.v5])
           SWIFT
-          swift test --package-path "$CHECK"
+          mkdir -p build
+          swift test --package-path "$CHECK" 2>&1 | tee build/daily-task-tests.log
       - id: build
         uses: ./.github/actions/build-ipa
         with:
           version: ${{ inputs.version }}
-          # Fork-only preview: keep the numeric build above the installed 1684.
-          build: ${{ inputs.build || '1685' }}
+          build: ${{ inputs.build || '1686' }}
           editions: ${{ inputs.editions || 'external' }}
+      - name: Simulator native library
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup target add aarch64-apple-ios-sim
+          cargo build --release --locked --target aarch64-apple-ios-sim --manifest-path native/launcher/Cargo.toml
+      - name: Real chat send-path and notification-action tests on iPhone Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphonesimulator --show-sdk-version)"
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          devices=json.load(sys.stdin)["devices"]
+          sdk=tuple(map(int,sys.argv[1].split(".")))
+          version=lambda r: tuple(map(int,r.rsplit("iOS-",1)[1].split("-")))
+          runtimes=sorted((r for r in devices if "iOS-" in r and version(r)<=sdk),key=version,reverse=True)
+          phones=[d for r in runtimes for d in devices[r] if d["name"].startswith("iPhone")]
+          print(phones[0]["udid"])' "$SDK")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcodebuild test -project native/ios-app/PokiExternal.xcodeproj -scheme Poki -configuration Debug \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/review-sim \
+            -resultBundlePath build/daily-task-review.xcresult -parallel-testing-enabled NO \
+            -only-testing:PokiTests/DailyTaskTests \
+            -only-testing:PokiTests/DailyTaskSchedulerTests \
+            -only-testing:PokiTests/DailyTaskRemindersTests \
+            -only-testing:PokiTests/AutomaticTaskApprovalsTests \
+            -only-testing:PokiTests/ChatHarnessTests/testDailyTaskContinuePrefixesReachTheModelAsNewTasks \
+            -only-testing:PokiTests/ChatHarnessTests/testAutomaticSendKeepsApprovalFloorUntilCancellationWithoutChangingPreferences \
+            -only-testing:PokiTests/ChatHarnessTests/testTimeQualifiedContinuationRequiresTheOwnersChoice \
+            -only-testing:PokiTests/ChatHarnessTests/testUnknownContinuationAsksBeforeStartingTheModel \
+            -only-testing:PokiTests/ChatHarnessTests/testAmbiguousContinuationWaitsForTheOwnersChoice \
+            -only-testing:PokiTests/LanguageTests/testNotificationActionsRefreshWithLanguageWithoutChangingTheirMeaning \
+            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 2>&1 | tee build/daily-task-simulator.log | \
+            grep --line-buffered -E 'Test Case|error:|failed|passed|TEST (SUCCEEDED|FAILED)|\*\* '
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: Poki-unsigned
-          path: out/
-          if-no-files-found: error
-      # Only main's caches reach other branches and tags; a branch's own help its next run.
-      - if: steps.build.outputs.rust-hit != 'true'
+          name: daily-task-review-evidence
+          path: |
+            build/daily-task-tests.log
+            build/daily-task-simulator.log
+            build/app-external.log
+            build/daily-task-review.xcresult
+          if-no-files-found: warn
+      - if: always() && steps.build.outputs.rust-key != ''
         uses: actions/cache/save@v4
         with:
           path: |
             ~/.cargo/registry
             native/launcher/target
           key: ${{ steps.build.outputs.rust-key }}
-      - uses: actions/cache/save@v4
+      - if: always() && steps.build.outcome == 'success'
+        uses: actions/cache/save@v4
         with:
           path: |
             build/app-external
