@@ -15,8 +15,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      # The identical app sources already passed 24 XCTest methods and the full iPhone build
-      # in run 44297041566. This run repairs only the simulator runtime-selection failure.
+      # Verify the PR merge candidate before publishing it to the PR branch.
       - name: Use the newest Xcode
         shell: bash
         run: |
@@ -43,12 +42,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f native/launcher/target/aarch64-apple-ios-sim/release/libpoki_launcher.a ]; then
-            native/launcher/fetch-idevice.sh
-            rustup update stable --no-self-update && rustup default stable
-            rustup target add aarch64-apple-ios-sim
-            cargo build --release --locked --target aarch64-apple-ios-sim --manifest-path native/launcher/Cargo.toml
-          fi
+          native/launcher/fetch-idevice.sh
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add aarch64-apple-ios-sim
+          cargo build --release --locked --target aarch64-apple-ios-sim --manifest-path native/launcher/Cargo.toml
           native/ios-app/scripts/make-assets.sh
           command -v xcodegen >/dev/null || brew install xcodegen
           xcodegen generate --spec native/ios-app/project-external.yml
@@ -69,6 +66,7 @@ jobs:
           print(phones[0]["udid"])' "$SDK")
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
+          echo "TEST_UDID=$UDID" >> "$GITHUB_ENV"
           xcodebuild test -project native/ios-app/PokiExternal.xcodeproj -scheme Poki -configuration Debug \
             -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/review-sim \
             -clonedSourcePackagesDirPath build/app-external/SourcePackages \
@@ -83,8 +81,35 @@ jobs:
             -only-testing:PokiTests/ChatHarnessTests/testUnknownContinuationAsksBeforeStartingTheModel \
             -only-testing:PokiTests/ChatHarnessTests/testAmbiguousContinuationWaitsForTheOwnersChoice \
             -only-testing:PokiTests/LanguageTests/testNotificationActionsRefreshWithLanguageWithoutChangingTheirMeaning \
+            -only-testing:PokiTests/SigningPageTests \
+            -only-testing:PokiTests/ScreenHistoryTests/testScreenHistoryToolIsUnavailableWhenTheSwitchIsOff \
+            -only-testing:PokiTests/ScreenHistoryTests/testScreenHistoryToolQueriesStoredReadsByTimeSpanAppAndKeyword \
+            -only-testing:PokiTests/ScreenHistoryTests/testLiveModelRequestsRefreshHistoryToolsAndDiscardRevokedEvidence \
             CODE_SIGNING_ALLOWED=NO ARCHS=arm64 2>&1 | tee build/daily-task-simulator.log | \
             grep --line-buffered -E 'Test Case|error:|failed|passed|TEST (SUCCEEDED|FAILED)|\*\* '
+      - name: Capture merged Settings, Signing and Screen History pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP=build/review-sim/Build/Products/Debug-iphonesimulator/Poki.app
+          BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          mkdir -p build/merge-ui
+          xcrun simctl install "$TEST_UDID" "$APP"
+          for spec in details-top details-end updates screenHistory; do
+            page="$spec"; end=NO
+            if [ "$spec" = details-top ]; then page=details; fi
+            if [ "$spec" = details-end ]; then page=details; end=YES; fi
+            xcrun simctl terminate "$TEST_UDID" "$BUNDLE" 2>/dev/null || true
+            xcrun simctl launch "$TEST_UDID" "$BUNDLE" -pokiScreen "$page" -pokiDetailsSample YES -pokiSettingsEnd "$end" -AppleLanguages '(en)' -AppleLocale en_US
+            sleep 4
+            xcrun simctl io "$TEST_UDID" screenshot "build/merge-ui/$spec.png"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr480-merge-ui
+          path: build/merge-ui/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: always()
         with:
