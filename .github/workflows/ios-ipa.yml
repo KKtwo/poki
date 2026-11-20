@@ -6,7 +6,7 @@ on:
       suite:
         description: Verification suite
         type: choice
-        options: [app, node, installer, latest-main]
+        options: [app, node, installer, latest-main, build]
         default: app
   workflow_call:
     inputs:
@@ -107,7 +107,7 @@ jobs:
           path: build/review-sim
           key: pr480-sim-xcode27-${{ github.sha }}
       - name: Daily-task safety regressions, remaining History queries, and actual merged pages
-        if: github.event.inputs.suite != 'latest-main'
+        if: github.event.inputs.suite == 'app'
         shell: bash
         run: |
           set -euo pipefail
