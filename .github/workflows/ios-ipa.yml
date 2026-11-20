@@ -53,6 +53,11 @@ jobs:
             ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
           key: ipa-xcode27-${{ github.sha }}
           restore-keys: ipa-xcode27-
+      - uses: actions/cache/restore@v4
+        with:
+          path: build/review-sim
+          key: pr480-sim-xcode27-${{ github.sha }}
+          restore-keys: pr480-sim-xcode27-
       - name: Prepare the simulator build dependencies
         shell: bash
         run: |
@@ -97,7 +102,11 @@ jobs:
           xcrun simctl privacy "$UDID" grant location-always "$BUNDLE"
           echo "TEST_APP=$APP" >> "$GITHUB_ENV"
           echo "TEST_BUNDLE=$BUNDLE" >> "$GITHUB_ENV"
-      - name: Retained Signing and Screen History app-hosted regressions
+      - uses: actions/cache/save@v4
+        with:
+          path: build/review-sim
+          key: pr480-sim-xcode27-${{ github.sha }}
+      - name: Daily-task safety regressions, remaining History queries, and actual merged pages
         if: github.event.inputs.suite != 'latest-main'
         shell: bash
         run: |
@@ -106,10 +115,42 @@ jobs:
           X="$(xcode-select -p)/Platforms/iPhoneSimulator.platform/Developer"
           : > build/daily-task-simulator.log
           for spec in \
-            SigningPageTests/testSigningPagesUseThePersonsLanguageAndNoInternalWords \
-            ScreenHistoryTests/testScreenHistoryToolIsUnavailableWhenTheSwitchIsOff \
+            DailyTaskTests/testClaimIsPersistedBeforeSubmissionAndSurvivesReopening \
+            DailyTaskTests/testOnlyLatestDueOccurrenceCanRunAndTomorrowCanRunAgain \
+            DailyTaskTests/testEditingOrCancellingRejectsAnAlreadyDeliveredNotification \
+            DailyTaskTests/testTwoSameTimeTasksWaitInTapOrderAndClaimIndependently \
+            DailyTaskTests/testEditingKeepsTheDueClaimAndRemovingLeavesOthersWaiting \
+            DailyTaskTests/testAnEditInFlightCannotResurrectADeletedSchedule \
+            DailyTaskTests/testAtCapacityEditingIsAllowedButAddingDoesNotReplaceAnyTask \
+            DailyTaskTests/testPersistenceFailureDoesNotSubmit \
+            DailyTaskTests/testUnreadableSchedulesCannotBeOverwrittenAndRecoverOnRetry \
+            DailyTaskTests/testInvalidExistingSchedulesAreNotReplacedWithAnEmptyList \
+            DailyTaskTests/testWestwardTravelDoesNotSkipTheNextLocalDueInstant \
+            DailyTaskSchedulerTests/testForegroundTickSubmitsOnceAndALaterTapCannotReplayIt \
+            DailyTaskSchedulerTests/testBackgroundDueTimeRequiresATapEvenAfterReturningToForeground \
+            DailyTaskSchedulerTests/testShortBackgroundRoundTripWithoutATimerTickRequiresATap \
+            DailyTaskSchedulerTests/testLockedOrUnknownLockStateCannotQueueAnAutomaticRun \
+            DailyTaskSchedulerTests/testBusyAtDueTimeLeavesTheOccurrenceForNotification \
+            DailyTaskSchedulerTests/testTwoTasksDueTogetherQueueBeforeTheFirstMakesPokiBusy \
+            DailyTaskSchedulerTests/testColdStartAndLongSuspensionDoNotBackfillAutomaticRuns \
+            DailyTaskSchedulerTests/testTappedRequestWaitsForForegroundAndReadinessWithoutBecomingAutomatic \
+            DailyTaskSchedulerTests/testRestartingTheClockAfterAnIdlePeriodObservesTheNextCrossing \
+            DailyTaskRemindersTests/testRefreshRegistersARepeatingRequestAndSkipsTheClaimedOccurrence \
+            DailyTaskRemindersTests/testDeniedAuthorizationDoesNotAddOrLogEveryTick \
+            DailyTaskRemindersTests/testFailedAddsBackOffAndRecoverWithoutPerSecondLogs \
+            DailyTaskRemindersTests/testClaimWhileAddIsInFlightCannotRestoreTodaysReminder \
+            DailyTaskRemindersTests/testDeletionWhileAddIsInFlightRemovesTheStaleRequest \
+            AutomaticTaskApprovalsTests/testAutomaticFloorCannotDisableAskingOrWeakenAStrongerLevel \
+            AutomaticTaskApprovalsTests/testEndingAnOlderRunCannotDropANewerRunsFloor \
+            ChatHarnessTests/testDailyTaskContinuePrefixesReachTheModelAsNewTasks \
+            ChatHarnessTests/testAutomaticSendKeepsApprovalFloorUntilCancellationWithoutChangingPreferences \
+            ChatHarnessTests/testTimeQualifiedContinuationRequiresTheOwnersChoice \
+            ChatHarnessTests/testUnknownContinuationAsksBeforeStartingTheModel \
+            ChatHarnessTests/testAmbiguousContinuationWaitsForTheOwnersChoice \
+            LanguageTests/testNotificationActionsRefreshWithLanguageWithoutChangingTheirMeaning \
             ScreenHistoryTests/testScreenHistoryToolQueriesStoredReadsByTimeSpanAppAndKeyword \
-            ScreenHistoryTests/testLiveModelRequestsRefreshHistoryToolsAndDiscardRevokedEvidence; do
+            ScreenHistoryTests/testLiveModelRequestsRefreshHistoryToolsAndDiscardRevokedEvidence \
+            PR480MergePageEvidenceTests/testMergedSettingsAndDestinationsRender; do
             LOG="build/${spec//\//-}.log"
             xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
             SIMCTL_CHILD_DYLD_INSERT_LIBRARIES="$X/usr/lib/libXCTestBundleInject.dylib" \
@@ -129,23 +170,16 @@ jobs:
             grep -Eq "Test Case .*${spec##*/}.*passed" "$LOG"
             grep -q 'Executed 1 test, with 0 failures' "$LOG"
           done
-      - name: Capture merged Settings, Signing and Screen History pages
+      - name: Collect actual rendered page evidence before deleting the Simulator
+        if: always() && env.TEST_BUNDLE != ''
         shell: bash
         run: |
           set -euo pipefail
-          APP="$GITHUB_WORKSPACE/build/review-sim/Build/Products/Debug-iphonesimulator/Poki.app"
-          BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          DATA=$(xcrun simctl get_app_container "$TEST_UDID" "$TEST_BUNDLE" data)
           mkdir -p build/merge-ui
-          xcrun simctl install "$TEST_UDID" "$APP"
-          for spec in details-top details-end updates screenHistory; do
-            page="$spec"; end=NO
-            if [ "$spec" = details-top ]; then page=details; fi
-            if [ "$spec" = details-end ]; then page=details; end=YES; fi
-            xcrun simctl terminate "$TEST_UDID" "$BUNDLE" 2>/dev/null || true
-            xcrun simctl launch "$TEST_UDID" "$BUNDLE" -pokiScreen "$page" -pokiDetailsSample YES -pokiSettingsEnd "$end" -AppleLanguages '(en)' -AppleLocale en_US
-            sleep 4
-            xcrun simctl io "$TEST_UDID" screenshot "build/merge-ui/$spec.png"
-          done
+          if [ -d "$DATA/Documents/PR480MergePageEvidence" ]; then
+            cp -R "$DATA/Documents/PR480MergePageEvidence/." build/merge-ui/
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
