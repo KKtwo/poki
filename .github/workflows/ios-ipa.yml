@@ -2,6 +2,12 @@
 name: iOS daily task review
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Verification suite
+        type: choice
+        options: [app, node]
+        default: app
   workflow_call:
     inputs:
       version: { type: string, required: true }
@@ -11,6 +17,7 @@ permissions:
   contents: read
 jobs:
   app:
+    if: github.event.inputs.suite != 'node'
     runs-on: xcode-27
     timeout-minutes: 90
     steps:
@@ -119,4 +126,32 @@ jobs:
             build/daily-task-simulator.log
             build/app-external.log
             build/daily-task-review.xcresult
+          if-no-files-found: warn
+  node-checks:
+    if: github.event.inputs.suite == 'node'
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Use the newest Xcode
+        shell: bash
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+      - run: npm ci --no-audit --no-fund
+      - name: Full npm regression suite with Xcode tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          npm test 2>&1 | tee build/npm-test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr480-npm-tests
+          path: build/npm-test.log
           if-no-files-found: warn
