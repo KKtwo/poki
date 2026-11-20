@@ -143,6 +143,7 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
       - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix agent --no-audit --no-fund
       - name: Full npm regression suite with Xcode tools
         shell: bash
         run: |
