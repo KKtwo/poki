@@ -6,7 +6,7 @@ on:
       suite:
         description: Verification suite
         type: choice
-        options: [app, node]
+        options: [app, node, installer]
         default: app
   workflow_call:
     inputs:
@@ -17,7 +17,7 @@ permissions:
   contents: read
 jobs:
   app:
-    if: github.event.inputs.suite != 'node'
+    if: github.event.inputs.suite != 'node' && github.event.inputs.suite != 'installer'
     runs-on: xcode-27
     timeout-minutes: 90
     steps:
@@ -56,44 +56,54 @@ jobs:
           native/ios-app/scripts/make-assets.sh
           command -v xcodegen >/dev/null || brew install xcodegen
           xcodegen generate --spec native/ios-app/project-external.yml
-      - name: Real chat send-path and notification-action tests on iPhone Simulator
+      - name: Retained Signing and Screen History tests on a signed disposable Simulator
         shell: bash
         run: |
           set -euo pipefail
           SDK="$(xcrun --sdk iphonesimulator --show-sdk-version)"
-          UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json,re,subprocess,sys
-          devices=json.load(sys.stdin)["devices"]
+          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c '
+          import json,re,sys
           sdk=tuple(map(int,sys.argv[1].split(".")))
-          metadata=json.loads(subprocess.check_output(["xcrun","simctl","list","runtimes","-j"]))["runtimes"]
+          metadata=json.load(sys.stdin)["runtimes"]
           versions={r["identifier"]:tuple(map(int,r["version"].split("."))) for r in metadata if r.get("isAvailable",False) and "iOS-" in r["identifier"]}
           standard=lambda r: re.fullmatch(r".*\.iOS-\d+(?:-\d+)*",r) is not None
-          runtimes=sorted((r for r in devices if r in versions and versions[r]<=sdk),key=lambda r:(versions[r],standard(r)),reverse=True)
-          phones=[d for r in runtimes for d in devices[r] if d["name"].startswith("iPhone")]
-          print(phones[0]["udid"])' "$SDK")
+          runtimes=sorted((r for r in versions if versions[r]<=sdk),key=lambda r:(versions[r],standard(r)),reverse=True)
+          print(runtimes[0])' "$SDK")
+          TYPE=$(xcrun simctl list devicetypes -j | python3 -c 'import json,sys; ds=json.load(sys.stdin)["devicetypes"]; print(next(d["identifier"] for d in ds if d["name"]=="iPhone 17 Pro"))')
+          UDID=$(xcrun simctl create Poki-PR480-merge "$TYPE" "$RUNTIME")
+          echo "TEST_UDID=$UDID" >> "$GITHUB_ENV"
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
-          echo "TEST_UDID=$UDID" >> "$GITHUB_ENV"
-          xcodebuild test -project native/ios-app/PokiExternal.xcodeproj -scheme Poki -configuration Debug \
+          # Follow native/ios-app/scripts/app-tests.sh: ad-hoc signing and the app-hosted injector.
+          # The earlier run already passed all 30 feature tests and three signing-layout tests.
+          xcodebuild build-for-testing -project native/ios-app/PokiExternal.xcodeproj -scheme Poki -configuration Debug \
             -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/review-sim \
             -clonedSourcePackagesDirPath build/app-external/SourcePackages \
-            -resultBundlePath build/daily-task-review.xcresult -parallel-testing-enabled NO \
-            -only-testing:PokiTests/DailyTaskTests \
-            -only-testing:PokiTests/DailyTaskSchedulerTests \
-            -only-testing:PokiTests/DailyTaskRemindersTests \
-            -only-testing:PokiTests/AutomaticTaskApprovalsTests \
-            -only-testing:PokiTests/ChatHarnessTests/testDailyTaskContinuePrefixesReachTheModelAsNewTasks \
-            -only-testing:PokiTests/ChatHarnessTests/testAutomaticSendKeepsApprovalFloorUntilCancellationWithoutChangingPreferences \
-            -only-testing:PokiTests/ChatHarnessTests/testTimeQualifiedContinuationRequiresTheOwnersChoice \
-            -only-testing:PokiTests/ChatHarnessTests/testUnknownContinuationAsksBeforeStartingTheModel \
-            -only-testing:PokiTests/ChatHarnessTests/testAmbiguousContinuationWaitsForTheOwnersChoice \
-            -only-testing:PokiTests/LanguageTests/testNotificationActionsRefreshWithLanguageWithoutChangingTheirMeaning \
-            -only-testing:PokiTests/SigningPageTests \
-            -only-testing:PokiTests/ScreenHistoryTests/testScreenHistoryToolIsUnavailableWhenTheSwitchIsOff \
-            -only-testing:PokiTests/ScreenHistoryTests/testScreenHistoryToolQueriesStoredReadsByTimeSpanAppAndKeyword \
-            -only-testing:PokiTests/ScreenHistoryTests/testLiveModelRequestsRefreshHistoryToolsAndDiscardRevokedEvidence \
-            CODE_SIGNING_ALLOWED=NO ARCHS=arm64 2>&1 | tee build/daily-task-simulator.log | \
-            grep --line-buffered -E 'Test Case|error:|failed|passed|TEST (SUCCEEDED|FAILED)|\*\* '
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= \
+            ARCHS=arm64 2>&1 | tee build/signed-sim-build.log | grep --line-buffered -E 'error:|BUILD (SUCCEEDED|FAILED)|\*\* '
+          APP=build/review-sim/Build/Products/Debug-iphonesimulator/Poki.app
+          BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          X="$(xcode-select -p)/Platforms/iPhoneSimulator.platform/Developer"
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl privacy "$UDID" grant location-always "$BUNDLE"
+          : > build/daily-task-simulator.log
+          for spec in \
+            SigningPageTests/testSigningPagesUseThePersonsLanguageAndNoInternalWords \
+            ScreenHistoryTests/testScreenHistoryToolIsUnavailableWhenTheSwitchIsOff \
+            ScreenHistoryTests/testScreenHistoryToolQueriesStoredReadsByTimeSpanAppAndKeyword \
+            ScreenHistoryTests/testLiveModelRequestsRefreshHistoryToolsAndDiscardRevokedEvidence; do
+            LOG="build/${spec//\//-}.log"
+            xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
+            SIMCTL_CHILD_DYLD_INSERT_LIBRARIES="$X/usr/lib/libXCTestBundleInject.dylib" \
+            SIMCTL_CHILD_XCTestBundlePath="$APP/PlugIns/PokiTests.xctest" \
+            SIMCTL_CHILD_DYLD_FRAMEWORK_PATH="$X/Library/Frameworks:$X/Library/PrivateFrameworks" \
+            SIMCTL_CHILD_DYLD_LIBRARY_PATH="$X/usr/lib" \
+              timeout 180 xcrun simctl launch --console-pty "$UDID" "$BUNDLE" -XCTest "$spec" -AppleLanguages '(en)' -AppleLocale en_US > "$LOG" 2>&1 || true
+            cat "$LOG" >> build/daily-task-simulator.log
+            grep -E '^Test Suite|^Test Case|error:|Executed' "$LOG" || true
+            grep -Eq "Test Case .*${spec##*/}.*passed" "$LOG"
+            grep -q 'Executed 1 test, with 0 failures' "$LOG"
+          done
       - name: Capture merged Settings, Signing and Screen History pages
         shell: bash
         run: |
@@ -125,10 +135,16 @@ jobs:
             build/daily-task-tests.log
             build/daily-task-simulator.log
             build/app-external.log
+            build/signed-sim-build.log
             build/daily-task-review.xcresult
           if-no-files-found: warn
+      - name: Remove only the Simulator created by this run
+        if: always() && env.TEST_UDID != ''
+        run: |
+          xcrun simctl shutdown "$TEST_UDID" >/dev/null 2>&1 || true
+          xcrun simctl delete "$TEST_UDID"
   node-checks:
-    if: github.event.inputs.suite == 'node'
+    if: github.event.inputs.suite == 'node' || github.event.inputs.suite == 'installer'
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
@@ -143,13 +159,22 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
       - run: npm ci --no-audit --no-fund
-      - run: npm ci --prefix agent --no-audit --no-fund
+      - if: github.event.inputs.suite == 'node'
+        run: npm ci --prefix agent --no-audit --no-fund
       - name: Full npm regression suite with Xcode tools
+        if: github.event.inputs.suite == 'node'
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build
           npm test 2>&1 | tee build/npm-test.log
+      - name: Isolated check of the installer fixture cleanup failure
+        if: github.event.inputs.suite == 'installer'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          node --test --test-name-pattern='the Apple code command in the prompt works pasted into a new Terminal outside the checkout' test/install-iphone.test.mjs 2>&1 | tee build/npm-test.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
