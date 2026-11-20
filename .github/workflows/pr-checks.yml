@@ -6,6 +6,12 @@ name: PR checks
 
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Verification scope
+        type: choice
+        options: [all, latest-main]
+        default: all
   pull_request:
     branches: [main, 'release/**']
 
@@ -26,10 +32,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: desktop, save-if: false }
       - run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
-      - run: cargo test -p poki-setup-core -p poki-setup-cli --manifest-path desktop/Cargo.toml
+      - if: github.event.inputs.scope != 'latest-main'
+        run: cargo test -p poki-setup-core -p poki-setup-cli --manifest-path desktop/Cargo.toml
         env: { POKI_SETUP_FILE_SECRETS: "1" }
+      - name: Apple HTTP 503 regression from latest main
+        if: github.event.inputs.scope == 'latest-main'
+        env: { POKI_SETUP_FILE_SECRETS: "1" }
+        run: |
+          set -euo pipefail
+          cargo test --locked --manifest-path desktop/Cargo.toml -p poki-setup-core apple::gsa::rate_limit_regressions::sign_in_with_http_503_tells_the_user_to_try_again_later -- --exact 2>&1 | tee gsa-503.log
+          grep -q '1 passed; 0 failed' gsa-503.log
 
   lockfiles:
+    if: github.event.inputs.scope != 'latest-main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -43,6 +58,7 @@ jobs:
           cargo metadata --locked --format-version 1 --manifest-path native/launcher/Cargo.toml > /dev/null
 
   windows-auth:
+    if: github.event.inputs.scope != 'latest-main'
     runs-on: windows-2022
     timeout-minutes: 20
     steps:
@@ -55,6 +71,7 @@ jobs:
           cargo test --locked -p poki-setup-core --manifest-path desktop/Cargo.toml apple::gsa::
 
   workflows:
+    if: github.event.inputs.scope != 'latest-main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

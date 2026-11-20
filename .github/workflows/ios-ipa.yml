@@ -6,7 +6,7 @@ on:
       suite:
         description: Verification suite
         type: choice
-        options: [app, node, installer]
+        options: [app, node, installer, latest-main]
         default: app
   workflow_call:
     inputs:
@@ -29,6 +29,14 @@ jobs:
           XCODE="$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1)"
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
+      - name: Routine attribution and migration regressions from latest main
+        if: github.event.inputs.suite == 'latest-main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          swift test --package-path native/ios/PokiCore --filter RoutineTests 2>&1 | tee build/routines.log
+          grep -q 'Executed 22 tests, with 0 failures' build/routines.log
       - id: rust
         uses: actions/cache/restore@v4
         with:
@@ -56,7 +64,7 @@ jobs:
           native/ios-app/scripts/make-assets.sh
           command -v xcodegen >/dev/null || brew install xcodegen
           xcodegen generate --spec native/ios-app/project-external.yml
-      - name: Retained Signing and Screen History tests on a signed disposable Simulator
+      - name: Build signed merged app on a disposable Simulator
         shell: bash
         run: |
           set -euo pipefail
@@ -86,6 +94,15 @@ jobs:
           X="$(xcode-select -p)/Platforms/iPhoneSimulator.platform/Developer"
           xcrun simctl install "$UDID" "$APP"
           xcrun simctl privacy "$UDID" grant location-always "$BUNDLE"
+          echo "TEST_APP=$APP" >> "$GITHUB_ENV"
+          echo "TEST_BUNDLE=$BUNDLE" >> "$GITHUB_ENV"
+      - name: Retained Signing and Screen History app-hosted regressions
+        if: github.event.inputs.suite != 'latest-main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          UDID="$TEST_UDID"; APP="$TEST_APP"; BUNDLE="$TEST_BUNDLE"
+          X="$(xcode-select -p)/Platforms/iPhoneSimulator.platform/Developer"
           : > build/daily-task-simulator.log
           for spec in \
             SigningPageTests/testSigningPagesUseThePersonsLanguageAndNoInternalWords \
@@ -98,7 +115,14 @@ jobs:
             SIMCTL_CHILD_XCTestBundlePath="$APP/PlugIns/PokiTests.xctest" \
             SIMCTL_CHILD_DYLD_FRAMEWORK_PATH="$X/Library/Frameworks:$X/Library/PrivateFrameworks" \
             SIMCTL_CHILD_DYLD_LIBRARY_PATH="$X/usr/lib" \
-              timeout 180 xcrun simctl launch --console-pty "$UDID" "$BUNDLE" -XCTest "$spec" -AppleLanguages '(en)' -AppleLocale en_US > "$LOG" 2>&1 || true
+              timeout 180 xcrun simctl launch --console-pty "$UDID" "$BUNDLE" -XCTest "$spec" -AppleLanguages '(en)' -AppleLocale en_US > "$LOG" 2>&1 &
+            TEST_PID=$!
+            for second in $(seq 1 180); do
+              if grep -q 'Executed 1 test' "$LOG" || ! kill -0 "$TEST_PID" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
+            wait "$TEST_PID" || true
             cat "$LOG" >> build/daily-task-simulator.log
             grep -E '^Test Suite|^Test Case|error:|Executed' "$LOG" || true
             grep -Eq "Test Case .*${spec##*/}.*passed" "$LOG"
@@ -136,6 +160,7 @@ jobs:
             build/daily-task-simulator.log
             build/app-external.log
             build/signed-sim-build.log
+            build/routines.log
             build/daily-task-review.xcresult
           if-no-files-found: warn
       - name: Remove only the Simulator created by this run
